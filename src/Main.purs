@@ -1,9 +1,23 @@
 module Main where
 
 import Prelude
-import Control.Monad.Eff (Eff)
-import Control.Monad.Eff.Console (CONSOLE, log)
 
-main :: forall e. Eff (console :: CONSOLE | e) Unit
+import Data.Maybe
+
+import Control.Monad.Eff
+import Control.Monad.Eff.Console (error)
+
+import Graphics.Canvas (getCanvasElementById, getContext2D)
+import Graphics.Canvas.Free
+
 main = do
-  log "Hello sailor!"
+  canvas <- getCanvasElementById "canvas"
+  case canvas of
+    Nothing -> error "No canvas"
+    Just canvasElement -> do
+      context <- getContext2D canvasElement
+      runGraphics context $ do
+        -- Canvas API calls will go here
+        setFillStyle "#AAB333"
+        rect { x: 0.0, y: 0.0, w: 400.0, h: 400.0 }
+        fill
