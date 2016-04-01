@@ -5,6 +5,8 @@ import Prelude
 import Data.Maybe
 import Data.List
 import Data.Int (toNumber)
+import Data.Date (now, Now, toEpochMilliseconds)
+import Data.Time
 import Debug.Trace (spy)
 
 import Control.Apply (lift2)
@@ -24,9 +26,15 @@ type Planet =
   , y :: Number
   , r :: Number
   , color :: String
+  , timestamp :: Number
   }
 
-randomPlanet :: forall e. DimensionPair -> Eff (random :: RANDOM | e) Planet
+maxAge = 5000.0
+
+getTimestamp :: Milliseconds -> Number
+getTimestamp (Milliseconds time) = time
+
+randomPlanet :: forall e. DimensionPair -> Eff (random :: RANDOM, now :: Now | e) Planet
 randomPlanet {w, h} = do
   r <- randomInt 0 256
   g <- randomInt 0 256
@@ -36,6 +44,11 @@ randomPlanet {w, h} = do
   y <- randomInt 0 h
   radius <- randomInt 0 100
 
+  datetime <- now
+
+  let timestamp = getTimestamp $ toEpochMilliseconds datetime
+
+
   return { x: toNumber x
          , y: toNumber y
          , r: toNumber radius
@@ -43,6 +56,7 @@ randomPlanet {w, h} = do
                   ++ (show r) ++ ","
                   ++ (show g) ++ ","
                   ++ (show b) ++ ")"
+         , timestamp: timestamp
          }
 
 identity :: forall a. a -> a
@@ -53,7 +67,7 @@ frameRate = every 33.0
 
 data Scene = Scene (List Planet) DimensionPair
 
-scene :: forall eff. Signal Boolean -> Signal DimensionPair -> Eff (random :: RANDOM | eff) (Signal Scene)
+scene :: forall eff. Signal Boolean -> Signal DimensionPair -> Eff (random :: RANDOM, now :: Now | eff) (Signal Scene)
 scene spaces dimens = do
   planets <- unwrap $ map2 (\ds _ -> randomPlanet ds) dimens (filter identity false spaces)
   let planetList = foldp Cons Nil planets
