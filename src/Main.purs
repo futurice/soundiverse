@@ -31,10 +31,15 @@ type Planet =
   , timestamp :: Number
   }
 
-maxAge = 5000.0
+maxAge = 2000.0
 
 getTimestamp :: Milliseconds -> Number
 getTimestamp (Milliseconds time) = time
+
+timestamp' :: forall e. Eff (now :: Now | e) Number
+timestamp' = do
+  date <- now
+  return $ getTimestamp $ toEpochMilliseconds date
 
 randomPlanet :: forall e. DimensionPair -> Eff (random :: RANDOM, now :: Now | e) Planet
 randomPlanet {w, h} = do
@@ -46,10 +51,7 @@ randomPlanet {w, h} = do
   y <- randomInt 0 h
   radius <- randomInt 0 100
 
-  datetime <- now
-
-  let timestamp = getTimestamp $ toEpochMilliseconds datetime
-
+  timestamp <- timestamp'
 
   return { x: toNumber x
          , y: toNumber y
@@ -68,10 +70,17 @@ frameRate = every 33.0
 
 data Scene = Scene (List Planet) DimensionPair
 
+expired :: Number -> Planet -> Boolean
+expired now planet = (now - planet.timestamp) < maxAge
+
 scene :: forall eff. Signal Boolean -> Signal DimensionPair -> Eff (random :: RANDOM, now :: Now | eff) (Signal Scene)
 scene spaces dimens = do
   planets <- unwrap $ map2 (\ds _ -> randomPlanet ds) dimens (filter identity false spaces)
-  let planetList = foldp Cons Nil planets
+  timestamp <- timestamp'
+
+  let planetHasExpired = expired timestamp
+      filterPlanetList = Data.List.filter planetHasExpired
+      planetList = map filterPlanetList $ foldp Cons Nil planets
   return $ map2 Scene planetList dimens
 
 renderPlanets :: forall eff. Context2D -> Number -> List Planet -> (Eff (canvas :: Canvas | eff) Context2D)
