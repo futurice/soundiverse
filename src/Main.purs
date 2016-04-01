@@ -6,8 +6,10 @@ import Data.Maybe
 import Data.List
 import Data.Int (toNumber)
 
+import Control.Apply (lift2)
 import Control.Monad.Eff
 import Control.Monad.Eff.Console (error, log, CONSOLE)
+import Control.Monad.Eff.Random (randomInt, randomRange, RANDOM)
 
 import Graphics.Canvas
 
@@ -23,19 +25,49 @@ type Planet =
   , color :: String
   }
 
-update :: List Planet -> Boolean -> List Planet
-update planets false = planets
-update planets true = Cons {x: 10.0, y: 10.0, r: 15.0, color: "rgba(0,0,0,0.1)"} planets
+randomPlanet :: forall e. DimensionPair -> Eff (random :: RANDOM | e) Planet
+randomPlanet {w, h} = do
+  r <- randomInt 0 256
+  g <- randomInt 0 256
+  b <- randomInt 0 256
+
+  x <- randomInt 0 w
+  y <- randomInt 0 h
+  radius <- randomInt 0 100
+
+  return { x: toNumber x
+         , y: toNumber y
+         , r: toNumber radius
+         , color: "rgb("
+                  ++ (show r) ++ ","
+                  ++ (show g) ++ ","
+                  ++ (show b) ++ ")"
+         }
+
+identity :: forall a. a -> a
+identity x = x
 
 frameRate :: Signal Number
 frameRate = every 33.0
 
 data Scene = Scene (List Planet) DimensionPair
 
-scene :: Signal Boolean -> Signal DimensionPair -> Signal Scene
+pcons :: forall e. Eff (random :: RANDOM | e) Planet -> Eff (random :: RANDOM | e) (List Planet) -> Eff (random :: RANDOM | e) (List Planet)
+pcons = lift2 Cons
+
+emptylist :: forall e. Eff (random :: RANDOM | e) (List Planet)
+emptylist = do return Nil
+
+constructScene :: forall e. Eff (random :: RANDOM | e) (List Planet) -> DimensionPair -> (Eff (random :: RANDOM | e) Scene)
+constructScene ps ds = do
+  planets <- ps
+  return $ Scene planets ds
+
+scene :: forall eff. Signal Boolean -> Signal DimensionPair -> Signal (Eff (random :: RANDOM | eff) Scene)
 scene spaces dimens =
-  map2 Scene planets dimens
-  where planets = foldp (flip update) Nil spaces
+  map2 constructScene planetList dimens
+  where planetList = foldp pcons emptylist planets
+        planets = map2 (\ds _ -> randomPlanet ds) dimens (filter identity false spaces)
 
 renderPlanets :: forall eff. Context2D -> List Planet -> (Eff (canvas :: Canvas | eff) Context2D)
 renderPlanets ctx Nil = do
@@ -44,20 +76,31 @@ renderPlanets ctx (Cons planet scene) = do
   ctx <- circle ctx planet
   renderPlanets ctx scene
 
-renderScene :: forall eff. Context2D -> Scene -> (Eff (canvas :: Canvas | eff) Unit)
-renderScene ctx (Scene planets dimens) = do
-  clearRect ctx { x: 0.0
-                , y: 0.0
-                , w: toNumber dimens.w
-                , h: toNumber dimens.h
-                }
+blackness :: forall eff. Context2D -> DimensionPair -> (Eff (canvas :: Canvas | eff) Context2D)
+blackness ctx {w, h} = do
+  withContext ctx $ do
+    setFillStyle "black" ctx
+    rect ctx { x: 0.0
+             , y: 0.0
+             , w: toNumber w
+             , h: toNumber h
+             }
+    fill ctx
+
+
+renderScene :: forall eff. Context2D -> (Eff (canvas :: Canvas, random :: RANDOM | eff) Scene) -> (Eff (canvas :: Canvas, random :: RANDOM | eff) Unit)
+renderScene ctx scn = do
+  (Scene planets dimens) <- scn
+  blackness ctx dimens
   renderPlanets ctx planets
   return unit
 
-circle ctx c = do
-  ctx <- setFillStyle c.color ctx
-  ctx <- arc ctx {x: c.x, y: c.y, r: c.r, start: 0.0, end: Math.pi * 2.0}
+circle ctx c = withContext ctx $ do
+  beginPath ctx
+  setFillStyle c.color ctx
+  arc ctx {x: c.x, y: c.y, r: c.r, start: 0.0, end: Math.pi * 2.0}
   fill ctx
+  closePath ctx
 
 pressedSpace :: forall eff. Boolean -> (Eff (console :: CONSOLE | eff) Unit)
 pressedSpace true = do
