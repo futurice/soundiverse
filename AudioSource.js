@@ -17,6 +17,7 @@ function noUserMedia() {
 
 function connectMediaStreamToAnalyser(audioCtx, analyser, callback) {
   return function(mediaStream) {
+
     var source = audioCtx.createMediaStreamSource(mediaStream);
     source.connect(analyser);
     callback(analyser);
@@ -31,7 +32,7 @@ function drawOntoCanvas(analyser) {
 
   function drawAudioData() {
     requestAnimationFrame(drawAudioData);
-    analyser.getByteTimeDomainData(dataArray);
+    analyser.getByteFrequencyData(dataArray);
 
     canvasCtx.fillStyle = 'rgb(200, 200, 200)';
     canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
@@ -77,7 +78,7 @@ ready(function() {
   // Create context + analyser
   var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   var analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 2048;
+  analyser.fftSize = 4096;
 
   // Connect microphone to analyser
   navigator.getUserMedia({audio: true},

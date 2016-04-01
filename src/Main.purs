@@ -1,17 +1,21 @@
 module Main where
 
-import Prelude
+import Prelude (Unit, show, (<$>), bind, map)
 
 import Data.Maybe
 
+import Control.Timer
 import Control.Monad.Eff
-import Control.Monad.Eff.Console (error, log)
+import Control.Monad.Eff.Random
+import Control.Monad.Eff.Console
+import DOM(DOM())
 
 import Graphics.Canvas (getCanvasElementById, getContext2D)
 import Graphics.Canvas.Free
 
-import Signal
-import Signal.DOM
+import Signal (Signal, runSignal, constant)
+import Signal.DOM (animationFrame)
+import Signal.Time (Time)
 
 --main = do
 --  canvas <- getCanvasElementById "canvas"
@@ -25,6 +29,50 @@ import Signal.DOM
 --        rect { x: 0.0, y: 0.0, w: 400.0, h: 400.0 }
 --        fill
 
-main = do
-  frame <- animationFrame
-  runSignal (log <$> (show <$> frame))
+--foreign import randomArray :: forall eff. Eff (random :: RANDOM | eff) (Array Number)
+
+--foreign import fillArray :: Int -> Int -> Array Int
+
+foreign import constArray :: forall eff. Eff (console :: CONSOLE | eff) (Array Int)
+foreign import onDOMContentLoaded :: forall a eff. Eff (dom :: DOM | eff) a -> Eff (eff) Unit
+
+foreign import data WebAudio :: !
+foreign import data AudioContext :: *
+foreign import data AnalyserNode :: *
+
+foreign import getAudioContext :: forall wau eff. Eff (wau :: WebAudio, console :: CONSOLE | eff) AudioContext
+
+foreign import getAnalyserNode :: forall wau eff. AudioContext -> (Eff (wau :: WebAudio, console :: CONSOLE | eff) AnalyserNode)
+
+foreign import getFFTSize
+  :: forall wau. AnalyserNode -> (Eff (wau :: WebAudio, console :: CONSOLE, dom :: DOM) Int)
+
+foreign import getByteFrequencyData :: forall wau. AnalyserNode -> (Eff (wau :: WebAudio, console :: CONSOLE, dom :: DOM) (Array Int))
+
+--constString :: String -> String
+--constString a = a
+
+--fillarray :: Int -> Array Int
+--fillarray c = [c, c, c]
+
+--constArray :: Array Int
+--constArray = [1, 2]
+
+type MicrophoneSignal = Eff (dom :: DOM, timer :: TIMER) (Signal (Array Int))
+
+foreign import microphoneInputFrameP :: forall e c. (c -> Signal c) -> AudioContext -> Eff (wau :: WebAudio, dom :: DOM, timer :: TIMER | e) Time -> MicrophoneSignal
+
+microphoneInputFrame :: forall wau e. AudioContext -> Eff (wau :: WebAudio, dom :: DOM, timer :: TIMER | e) Time -> MicrophoneSignal
+microphoneInputFrame audioCtx = microphoneInputFrameP constant audioCtx
+
+--type FrameSignal = Eff (dom :: DOM, timer :: TIMER) (Signal Time)
+
+--main :: forall t19. Eff ( timer :: TIMER, console :: CONSOLE | t19) Unit
+main = onDOMContentLoaded do
+	ctx <- getAudioContext
+	analyser <- getAnalyserNode ctx
+	inputStream <- microphoneInputFrame ctx
+	let stringified = map show inputStream
+	runSignal (map log stringified)
+  	--frame <- animationFrame
+  	--runSignal (map log (map show frame))
