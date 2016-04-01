@@ -63,26 +63,26 @@ function drawOntoCanvas(analyser) {
 }
 
 
-// ready(function() {
-//
-//   var canvas = document.getElementById("canvas");
-//   var canvasCtx = canvas.getContext('2d');
-//   canvasCtx.clearRect(0, 0, WIDTH, HEIGHT);
-//
-//
-//   if (!navigator.getUserMedia) {
-//     console.error("No support for getUserMedia");
-//     return;
-//   }
-//
-//   // Create context + analyser
-//   var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-//   var analyser = audioCtx.createAnalyser();
-//   analyser.fftSize = 2048;
-//
-//   // Connect microphone to analyser
-//   navigator.getUserMedia({audio: true},
-//     connectMediaStreamToAnalyser(audioCtx, analyser, drawOntoCanvas),
-//     noUserMedia);
-//
-// });
+ready(function() {
+
+  var canvas = document.getElementById("canvas");
+  var canvasCtx = canvas.getContext('2d');
+  canvasCtx.clearRect(0, 0, WIDTH, HEIGHT);
+
+
+  if (!navigator.getUserMedia) {
+    console.error("No support for getUserMedia");
+    return;
+  }
+
+  // Create context + analyser
+  var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  var analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+
+  // Connect microphone to analyser
+  navigator.getUserMedia({audio: true},
+    connectMediaStreamToAnalyser(audioCtx, analyser, drawOntoCanvas),
+    noUserMedia);
+
+});

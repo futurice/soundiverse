@@ -4,14 +4,15 @@ import Prelude
 
 import Data.Maybe
 import Data.List
+import Data.Int (toNumber)
 
 import Control.Monad.Eff
 import Control.Monad.Eff.Console (error, log, CONSOLE)
 
 import Graphics.Canvas
 
-import Signal.DOM (keyPressed)
-import Signal (filter, runSignal, Signal, foldp, sampleOn)
+import Signal.DOM (keyPressed, windowDimensions, DimensionPair)
+import Signal (filter, runSignal, Signal, foldp, sampleOn, map2)
 import Signal.Time (every)
 import Math
 
@@ -29,20 +30,28 @@ update planets true = Cons {x: 10.0, y: 10.0, r: 15.0, color: "rgba(0,0,0,0.1)"}
 frameRate :: Signal Number
 frameRate = every 33.0
 
-scene :: Signal Boolean -> Signal (List Planet)
-scene spaces = foldp (flip update) Nil spaces
+data Scene = Scene (List Planet) DimensionPair
 
-renderScene :: forall eff. Context2D -> List Planet -> (Eff (canvas :: Canvas | eff) Context2D)
-renderScene ctx Nil = do
+scene :: Signal Boolean -> Signal DimensionPair -> Signal Scene
+scene spaces dimens =
+  map2 Scene planets dimens
+  where planets = foldp (flip update) Nil spaces
+
+renderPlanets :: forall eff. Context2D -> List Planet -> (Eff (canvas :: Canvas | eff) Context2D)
+renderPlanets ctx Nil = do
   return ctx
-renderScene ctx (Cons planet scene) = do
+renderPlanets ctx (Cons planet scene) = do
   ctx <- circle ctx planet
-  renderScene ctx scene
+  renderPlanets ctx scene
 
-renderScene' :: forall eff. Context2D -> List Planet -> (Eff (canvas :: Canvas | eff) Unit)
-renderScene' ctx planets = do
-  clearRect ctx {x: 0.0, y: 0.0, w: 100.0, h: 100.0}
-  renderScene ctx planets
+renderScene :: forall eff. Context2D -> Scene -> (Eff (canvas :: Canvas | eff) Unit)
+renderScene ctx (Scene planets dimens) = do
+  clearRect ctx { x: 0.0
+                , y: 0.0
+                , w: toNumber dimens.w
+                , h: toNumber dimens.h
+                }
+  renderPlanets ctx planets
   return unit
 
 circle ctx c = do
@@ -56,6 +65,11 @@ pressedSpace true = do
 pressedSpace false = do
   return unit
 
+setCanvasSize :: forall eff. CanvasElement -> DimensionPair -> (Eff (canvas :: Canvas | eff) Unit)
+setCanvasSize canvas {w, h} = do
+  setCanvasWidth (toNumber w) canvas
+  setCanvasHeight (toNumber h) canvas
+  return unit
 
 main = do
   canvas <- getCanvasElementById "canvas"
@@ -64,7 +78,9 @@ main = do
     Just canvasElement -> do
       ctx <- getContext2D canvasElement
       spaces <- keyPressed 32
-      let scene' = scene $ sampleOn frameRate spaces
-      runSignal $ map (renderScene' ctx) scene'
+      dimens <- windowDimensions
+      let scene' = scene (sampleOn frameRate spaces) dimens
+      runSignal $ map (renderScene ctx) scene'
       runSignal $ map pressedSpace spaces
+      runSignal $ map (setCanvasSize canvasElement) dimens
       -- runSignal spaceEffect
