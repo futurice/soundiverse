@@ -5,6 +5,7 @@ import Prelude
 import Data.Maybe
 import Data.List
 import Data.Int (toNumber)
+import Debug.Trace (spy)
 
 import Control.Apply (lift2)
 import Control.Monad.Eff
@@ -14,7 +15,7 @@ import Control.Monad.Eff.Random (randomInt, randomRange, RANDOM)
 import Graphics.Canvas
 
 import Signal.DOM (keyPressed, windowDimensions, DimensionPair)
-import Signal (filter, runSignal, Signal, foldp, sampleOn, map2)
+import Signal (filter, runSignal, Signal, foldp, sampleOn, map2, unwrap)
 import Signal.Time (every)
 import Math
 
@@ -52,22 +53,11 @@ frameRate = every 33.0
 
 data Scene = Scene (List Planet) DimensionPair
 
-pcons :: forall e. Eff (random :: RANDOM | e) Planet -> Eff (random :: RANDOM | e) (List Planet) -> Eff (random :: RANDOM | e) (List Planet)
-pcons = lift2 Cons
-
-emptylist :: forall e. Eff (random :: RANDOM | e) (List Planet)
-emptylist = do return Nil
-
-constructScene :: forall e. Eff (random :: RANDOM | e) (List Planet) -> DimensionPair -> (Eff (random :: RANDOM | e) Scene)
-constructScene ps ds = do
-  planets <- ps
-  return $ Scene planets ds
-
-scene :: forall eff. Signal Boolean -> Signal DimensionPair -> Signal (Eff (random :: RANDOM | eff) Scene)
-scene spaces dimens =
-  map2 constructScene planetList dimens
-  where planetList = foldp pcons emptylist planets
-        planets = map2 (\ds _ -> randomPlanet ds) dimens (filter identity false spaces)
+scene :: forall eff. Signal Boolean -> Signal DimensionPair -> Eff (random :: RANDOM | eff) (Signal Scene)
+scene spaces dimens = do
+  planets <- unwrap $ map2 (\ds _ -> randomPlanet ds) dimens (filter identity false spaces)
+  let planetList = foldp Cons Nil planets
+  return $ map2 Scene planetList dimens
 
 renderPlanets :: forall eff. Context2D -> List Planet -> (Eff (canvas :: Canvas | eff) Context2D)
 renderPlanets ctx Nil = do
@@ -88,9 +78,8 @@ blackness ctx {w, h} = do
     fill ctx
 
 
-renderScene :: forall eff. Context2D -> (Eff (canvas :: Canvas, random :: RANDOM | eff) Scene) -> (Eff (canvas :: Canvas, random :: RANDOM | eff) Unit)
-renderScene ctx scn = do
-  (Scene planets dimens) <- scn
+renderScene :: forall eff. Context2D -> Scene -> (Eff (canvas :: Canvas | eff) Unit)
+renderScene ctx (Scene planets dimens) = do
   blackness ctx dimens
   renderPlanets ctx planets
   return unit
@@ -122,7 +111,7 @@ main = do
       ctx <- getContext2D canvasElement
       spaces <- keyPressed 32
       dimens <- windowDimensions
-      let scene' = scene (sampleOn frameRate spaces) dimens
+      scene' <- scene (sampleOn frameRate spaces) dimens
       runSignal $ map (renderScene ctx) scene'
       runSignal $ map pressedSpace spaces
       runSignal $ map (setCanvasSize canvasElement) dimens

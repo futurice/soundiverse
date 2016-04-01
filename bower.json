@@ -16,6 +16,7 @@
     "purescript-free-canvas": "^0.4.1",
     "purescript-lists": "^0.7.10",
     "purescript-random": "^0.2.3",
-    "purescript-signal": "^5.0.1"
+    "purescript-signal": "^5.0.1",
+    "purescript-debug": "^0.1.3"
   }
 }
