@@ -25,7 +25,9 @@ type Planet =
   { x :: Number
   , y :: Number
   , r :: Number
-  , color :: String
+  , red :: Int
+  , green :: Int
+  , blue :: Int
   , timestamp :: Number
   }
 
@@ -52,10 +54,9 @@ randomPlanet {w, h} = do
   return { x: toNumber x
          , y: toNumber y
          , r: toNumber radius
-         , color: "rgb("
-                  ++ (show r) ++ ","
-                  ++ (show g) ++ ","
-                  ++ (show b) ++ ")"
+         , red: r
+         , green: g
+         , blue: b
          , timestamp: timestamp
          }
 
@@ -73,12 +74,12 @@ scene spaces dimens = do
   let planetList = foldp Cons Nil planets
   return $ map2 Scene planetList dimens
 
-renderPlanets :: forall eff. Context2D -> List Planet -> (Eff (canvas :: Canvas | eff) Context2D)
-renderPlanets ctx Nil = do
+renderPlanets :: forall eff. Context2D -> Number -> List Planet -> (Eff (canvas :: Canvas | eff) Context2D)
+renderPlanets ctx timestamp Nil = do
   return ctx
-renderPlanets ctx (Cons planet scene) = do
-  ctx <- circle ctx planet
-  renderPlanets ctx scene
+renderPlanets ctx timestamp (Cons planet scene) = do
+  renderPlanet ctx timestamp planet
+  renderPlanets ctx timestamp scene
 
 blackness :: forall eff. Context2D -> DimensionPair -> (Eff (canvas :: Canvas | eff) Context2D)
 blackness ctx {w, h} = do
@@ -91,25 +92,33 @@ blackness ctx {w, h} = do
              }
     fill ctx
 
-
-renderScene :: forall eff. Context2D -> Scene -> (Eff (canvas :: Canvas | eff) Unit)
+renderScene :: forall eff. Context2D -> Scene -> (Eff (canvas :: Canvas, now :: Now | eff) Unit)
 renderScene ctx (Scene planets dimens) = do
+  datetime <- now
+  let timestamp = getTimestamp $ toEpochMilliseconds datetime
   blackness ctx dimens
-  renderPlanets ctx planets
+  renderPlanets ctx timestamp planets
   return unit
 
-circle ctx c = withContext ctx $ do
+min a b = if a < b then a else b
+max a b = if a > b then a else b
+
+calculateOpacity nowstamp birthstamp =
+  let age = nowstamp - birthstamp
+  in 1.0 - ((max (min age maxAge) 1.0) / maxAge)
+
+renderPlanet :: forall eff. Context2D -> Number -> Planet -> (Eff (canvas :: Canvas | eff) Context2D)
+renderPlanet ctx timestamp planet = withContext ctx $ do
+  let opacity = calculateOpacity timestamp planet.timestamp
+  let color = "rgba(" ++ (show planet.red) ++ ", "
+                      ++ (show planet.green) ++ ", "
+                      ++ (show planet.blue) ++ ", "
+                      ++ (show opacity) ++ ")"
   beginPath ctx
-  setFillStyle c.color ctx
-  arc ctx {x: c.x, y: c.y, r: c.r, start: 0.0, end: Math.pi * 2.0}
+  setFillStyle color ctx
+  arc ctx {x: planet.x, y: planet.y, r: planet.r, start: 0.0, end: Math.pi * 2.0}
   fill ctx
   closePath ctx
-
-pressedSpace :: forall eff. Boolean -> (Eff (console :: CONSOLE | eff) Unit)
-pressedSpace true = do
-  log "pressed space!"
-pressedSpace false = do
-  return unit
 
 setCanvasSize :: forall eff. CanvasElement -> DimensionPair -> (Eff (canvas :: Canvas | eff) Unit)
 setCanvasSize canvas {w, h} = do
@@ -127,6 +136,4 @@ main = do
       dimens <- windowDimensions
       scene' <- scene (sampleOn frameRate spaces) dimens
       runSignal $ map (renderScene ctx) scene'
-      runSignal $ map pressedSpace spaces
       runSignal $ map (setCanvasSize canvasElement) dimens
-      -- runSignal spaceEffect
