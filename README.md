@@ -11,3 +11,9 @@ Licensed under WTFPL.
 2. Run `bower i`
 3. Start server `pulp server`
 4. Open website
+
+## To Bundle
+
+```
+pulp browserify --to app.js
+```
