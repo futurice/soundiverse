@@ -9,7 +9,7 @@ exports.audioStreamP =
 	  analyser.fftSize = 4096;
 
 		navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
-		
+
 
 	  // Connect microphone to analyser
 	  navigator.getUserMedia(
@@ -18,7 +18,7 @@ exports.audioStreamP =
 	    () => console.error('doh')
 		);
 
-		var dataArray = new Uint8Array(0);
+		var dataArray = new Uint8Array(3);
 		var out = constant(dataArray);
 
 		function connect (mediaStream) {

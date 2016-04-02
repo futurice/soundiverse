@@ -5,7 +5,7 @@ import Prelude
 import Data.Array
 import Data.Maybe
 import Data.List
-import Data.Int (toNumber)
+import Data.Int (toNumber, floor)
 import Data.Date (now, Now, toEpochMilliseconds)
 import Data.Time
 import Debug.Trace (spy)
@@ -45,11 +45,11 @@ timestamp' = do
   date <- now
   return $ getTimestamp $ toEpochMilliseconds date
 
-randomPlanet :: forall e. Number -> DimensionPair -> Eff (random :: RANDOM, now :: Now | e) Planet
-randomPlanet radius {w, h} = do
-  r <- randomInt 0 256
-  g <- randomInt 0 256
-  b <- randomInt 0 256
+freq2colorLowerBound :: forall e. Number -> Int
+freq2colorLowerBound freq = floor (((min freq 2000.0) / 2000.0) * 255.0)
+
+randomPlanet :: forall e. Number -> Number -> Number -> Number -> DimensionPair -> Eff (random :: RANDOM, now :: Now | e) Planet
+randomPlanet r g b radius {w, h} = do
 
   x <- randomInt 0 w
   y <- randomInt 0 h
@@ -59,17 +59,22 @@ randomPlanet radius {w, h} = do
   return { x: toNumber x
          , y: toNumber y
          , r: radius
-         , red: r
-         , green: g
-         , blue: b
+         , red: floor r
+         , green: floor g
+         , blue: floor b
          , timestamp: timestamp
          }
 
 sum :: Array Int -> Int
 sum ints = foldl (+) 0 ints
 
+len :: forall a. Array a -> Int
+len = Data.Array.length
+
 amplitude :: Array Int -> Number
-amplitude ints = (toNumber (sum ints)) / (toNumber (Data.Array.length ints))
+amplitude ints
+  | len ints > 0 = (toNumber (sum ints)) / (toNumber (len ints))
+  | otherwise = 0.0
 
 type PeakCounterState = { prevWasPositive :: Boolean
                         , count :: Number
@@ -82,16 +87,14 @@ doCount state next
   | state.prevWasPositive == false && next > 0 = {prevWasPositive: true, count: state.count + 1.0}
   | state.prevWasPositive == false && next <= 0 = state
 
-countPeaks :: Array Int -> Number
-countPeaks ints =
-  let counterState = foldl doCount {prevWasPositive: false, count: 0.0} ints
-  in counterState.count
+cutA = 200
+cutB = 400
 
-frequency :: Array Int -> Number -> Number
-frequency ints time = (countPeaks ints) / time
-
-
-generatePlanet dimens audio = randomPlanet (amplitude audio) dimens
+generatePlanet dimens audio =
+  let r = amplitude $ Data.Array.slice 0 cutA audio
+      g = amplitude $ Data.Array.slice cutA cutB audio
+      b = amplitude $ Data.Array.slice cutB 2048 audio
+  in randomPlanet r g b (amplitude audio) dimens
 
 identity :: forall a. a -> a
 identity x = x
