@@ -71,6 +71,26 @@ sum ints = foldl (+) 0 ints
 amplitude :: Array Int -> Number
 amplitude ints = (toNumber (sum ints)) / (toNumber (Data.Array.length ints))
 
+type PeakCounterState = { prevWasPositive :: Boolean
+                        , count :: Number
+                        }
+
+doCount :: PeakCounterState -> Int -> PeakCounterState
+doCount state next
+  | state.prevWasPositive && next > 0 = state
+  | state.prevWasPositive && next <= 0 = {prevWasPositive: false, count: state.count}
+  | state.prevWasPositive == false && next > 0 = {prevWasPositive: true, count: state.count + 1.0}
+  | state.prevWasPositive == false && next <= 0 = state
+
+countPeaks :: Array Int -> Number
+countPeaks ints =
+  let counterState = foldl doCount {prevWasPositive: false, count: 0.0} ints
+  in counterState.count
+
+frequency :: Array Int -> Number -> Number
+frequency ints time = (countPeaks ints) / time
+
+
 generatePlanet dimens audio = randomPlanet (amplitude audio) dimens
 
 identity :: forall a. a -> a
