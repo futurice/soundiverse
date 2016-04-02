@@ -2,12 +2,14 @@ module Main where
 
 import Prelude
 
+import Data.Array
 import Data.Maybe
 import Data.List
 import Data.Int (toNumber)
 import Data.Date (now, Now, toEpochMilliseconds)
 import Data.Time
 import Debug.Trace (spy)
+import Data.Foldable (foldl)
 
 import Control.Apply (lift2)
 import Control.Monad.Eff
@@ -43,26 +45,33 @@ timestamp' = do
   date <- now
   return $ getTimestamp $ toEpochMilliseconds date
 
-randomPlanet :: forall e. DimensionPair -> Eff (random :: RANDOM, now :: Now | e) Planet
-randomPlanet {w, h} = do
+randomPlanet :: forall e. Number -> DimensionPair -> Eff (random :: RANDOM, now :: Now | e) Planet
+randomPlanet radius {w, h} = do
   r <- randomInt 0 256
   g <- randomInt 0 256
   b <- randomInt 0 256
 
   x <- randomInt 0 w
   y <- randomInt 0 h
-  radius <- randomInt 0 100
 
   timestamp <- timestamp'
 
   return { x: toNumber x
          , y: toNumber y
-         , r: toNumber radius
+         , r: radius
          , red: r
          , green: g
          , blue: b
          , timestamp: timestamp
          }
+
+sum :: Array Int -> Int
+sum ints = foldl (+) 0 ints
+
+amplitude :: Array Int -> Number
+amplitude ints = (toNumber (sum ints)) / (toNumber (Data.Array.length ints))
+
+generatePlanet dimens audio = randomPlanet (amplitude audio) dimens
 
 identity :: forall a. a -> a
 identity x = x
@@ -75,9 +84,9 @@ data Scene = Scene (List Planet) DimensionPair
 expired :: Number -> Planet -> Boolean
 expired now planet = (now - planet.timestamp) < maxAge
 
-scene :: forall eff. Signal Boolean -> Signal DimensionPair -> Eff (random :: RANDOM, now :: Now | eff) (Signal Scene)
-scene spaces dimens = do
-  planets <- unwrap $ map2 (\ds _ -> randomPlanet ds) dimens (filter identity false spaces)
+scene :: forall eff. Signal (Array Int) -> Signal DimensionPair -> Eff (random :: RANDOM, now :: Now | eff) (Signal Scene)
+scene audio dimens = do
+  planets <- unwrap $ map2 generatePlanet dimens audio
   timestamp <- timestamp'
 
   let planetHasExpired = expired timestamp
@@ -149,9 +158,8 @@ main = do
     Nothing -> error "No canvas"
     Just canvasElement -> do
       ctx <- getContext2D canvasElement
-      spaces <- keyPressed 32
       dimens <- windowDimensions
-      scene' <- scene (sampleOn frameRate spaces) dimens
+      audios <- audioStream
+      scene' <- scene audios dimens
       runSignal $ map (renderScene ctx) scene'
       runSignal $ map (setCanvasSize canvasElement) dimens
-      audio <- audioStream
