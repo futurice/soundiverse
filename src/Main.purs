@@ -21,7 +21,7 @@ import Graphics.Canvas
 import Signal.DOM (keyPressed, windowDimensions, DimensionPair)
 import Signal (filter, runSignal, Signal, foldp, sampleOn, map2, unwrap, constant)
 import Signal.Time (every)
-import Math
+import Math hiding (floor)
 
 foreign import data AUDIO :: !
 
@@ -143,8 +143,8 @@ renderScene ctx (Scene planets dimens) = do
   renderPlanets ctx timestamp planets
   return unit
 
-min a b = if a < b then a else b
-max a b = if a > b then a else b
+--min a b = if a < b then a else b
+--max a b = if a > b then a else b
 
 calculateOpacity nowstamp birthstamp =
   let age = nowstamp - birthstamp
