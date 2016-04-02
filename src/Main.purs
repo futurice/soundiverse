@@ -138,11 +138,10 @@ setCanvasSize canvas {w, h} = do
   return unit
 
 
-foreign import audioStreamP :: forall e c. (c -> Signal c) -> Eff (audio :: AUDIO | e) (Signal String)
+foreign import audioStreamP :: forall e c. (c -> Signal c) -> Eff (audio :: AUDIO | e) (Signal (Array Int))
 
-audioStream :: forall e. Eff (audio :: AUDIO | e) (Signal String)
+audioStream :: forall e. Eff (audio :: AUDIO | e) (Signal (Array Int))
 audioStream = audioStreamP constant
-
 
 main = do
   canvas <- getCanvasElementById "canvas"
@@ -155,3 +154,4 @@ main = do
       scene' <- scene (sampleOn frameRate spaces) dimens
       runSignal $ map (renderScene ctx) scene'
       runSignal $ map (setCanvasSize canvasElement) dimens
+      audio <- audioStream
