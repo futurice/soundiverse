@@ -5,7 +5,7 @@ import Prelude
 import Data.Array
 import Data.Maybe
 import Data.List
-import Data.Int (toNumber)
+import Data.Int (toNumber, floor, round)
 import Data.Date (now, Now, toEpochMilliseconds)
 import Data.Time
 import Debug.Trace (spy)
@@ -15,6 +15,8 @@ import Control.Apply (lift2)
 import Control.Monad.Eff
 import Control.Monad.Eff.Console (error, log, CONSOLE)
 import Control.Monad.Eff.Random (randomInt, randomRange, RANDOM)
+
+import Color
 
 import Graphics.Canvas
 
@@ -29,13 +31,11 @@ type Planet =
   { x :: Number
   , y :: Number
   , r :: Number
-  , red :: Int
-  , green :: Int
-  , blue :: Int
+  , color :: Color
   , timestamp :: Number
   }
 
-maxAge = 2000.0
+maxAge = 3000.0
 
 getTimestamp :: Milliseconds -> Number
 getTimestamp (Milliseconds time) = time
@@ -47,9 +47,8 @@ timestamp' = do
 
 randomPlanet :: forall e. Number -> DimensionPair -> Eff (random :: RANDOM, now :: Now | e) Planet
 randomPlanet radius {w, h} = do
-  r <- randomInt 0 256
-  g <- randomInt 0 256
-  b <- randomInt 0 256
+  hue <- randomRange 0.0 360.0
+  let col = hsl hue 1.0 (1.0-(radius / 256.0))
 
   x <- randomInt 0 w
   y <- randomInt 0 h
@@ -59,9 +58,7 @@ randomPlanet radius {w, h} = do
   return { x: toNumber x
          , y: toNumber y
          , r: radius
-         , red: r
-         , green: g
-         , blue: b
+         , color: col
          , timestamp: timestamp
          }
 
@@ -69,7 +66,8 @@ sum :: Array Int -> Int
 sum ints = foldl (+) 0 ints
 
 amplitude :: Array Int -> Number
-amplitude ints = (toNumber (sum ints)) / (toNumber (Data.Array.length ints))
+amplitude ints 	| ((Data.Array.length ints) > 0) 	= (toNumber (sum ints)) / (toNumber (Data.Array.length ints))
+				| otherwise							= 0.0
 
 type PeakCounterState = { prevWasPositive :: Boolean
                         , count :: Number
@@ -143,6 +141,7 @@ renderScene ctx (Scene planets dimens) = do
 min a b = if a < b then a else b
 max a b = if a > b then a else b
 
+calculateOpacity :: Number -> Number -> Number
 calculateOpacity nowstamp birthstamp =
   let age = nowstamp - birthstamp
   in 1.0 - ((max (min age maxAge) 1.0) / maxAge)
@@ -150,10 +149,9 @@ calculateOpacity nowstamp birthstamp =
 renderPlanet :: forall eff. Context2D -> Number -> Planet -> (Eff (canvas :: Canvas | eff) Context2D)
 renderPlanet ctx timestamp planet = withContext ctx $ do
   let opacity = calculateOpacity timestamp planet.timestamp
-  let color = "rgba(" ++ (show planet.red) ++ ", "
-                      ++ (show planet.green) ++ ", "
-                      ++ (show planet.blue) ++ ", "
-                      ++ (show opacity) ++ ")"
+  let pColor = toRGBA planet.color
+  let renderColor = rgba pColor.r pColor.g pColor.b opacity
+  let color = cssStringRGBA renderColor
   beginPath ctx
   setFillStyle color ctx
   arc ctx {x: planet.x, y: planet.y, r: planet.r, start: 0.0, end: Math.pi * 2.0}
