@@ -17,9 +17,11 @@ import Control.Monad.Eff.Random (randomInt, randomRange, RANDOM)
 import Graphics.Canvas
 
 import Signal.DOM (keyPressed, windowDimensions, DimensionPair)
-import Signal (filter, runSignal, Signal, foldp, sampleOn, map2, unwrap)
+import Signal (filter, runSignal, Signal, foldp, sampleOn, map2, unwrap, constant)
 import Signal.Time (every)
 import Math
+
+foreign import data AUDIO :: !
 
 type Planet =
   { x :: Number
@@ -134,6 +136,13 @@ setCanvasSize canvas {w, h} = do
   setCanvasWidth (toNumber w) canvas
   setCanvasHeight (toNumber h) canvas
   return unit
+
+
+foreign import audioStreamP :: forall e c. (c -> Signal c) -> Eff (audio :: AUDIO | e) (Signal String)
+
+audioStream :: forall e. Eff (audio :: AUDIO | e) (Signal String)
+audioStream = audioStreamP constant
+
 
 main = do
   canvas <- getCanvasElementById "canvas"
