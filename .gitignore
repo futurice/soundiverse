@@ -6,3 +6,5 @@
 /src/.webpack.js
 
 out.js
+
+.DS_Store
