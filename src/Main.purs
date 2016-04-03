@@ -1,27 +1,51 @@
 module Main where
 
-import Prelude
+import Prelude ( Unit
+               , map
+               , ($)
+               , bind
+               , unit
+               , return
+               , (*)
+               , (/)
+               , (-)
+               , (<)
+               , otherwise
+               , (>)
+               , (+))
 
-import Data.Array
-import Data.Maybe
-import Data.List
-import Data.Int (toNumber, floor)
+import Data.Maybe (Maybe(Just, Nothing))
+import Data.List (List(Cons, Nil))
+import Data.Int (toNumber)
 import Data.Date (now, Now, toEpochMilliseconds)
-import Data.Time
-import Debug.Trace (spy)
+import Data.Time (Milliseconds(Milliseconds))
 import Data.Foldable (foldl)
 
-import Control.Apply (lift2)
-import Control.Monad.Eff
-import Control.Monad.Eff.Console (error, log, CONSOLE)
+import Control.Monad.Eff (Eff)
+import Control.Monad.Eff.Console (CONSOLE, error)
 import Control.Monad.Eff.Random (randomInt, randomRange, RANDOM)
 
-import Graphics.Canvas
+import Color
 
-import Signal.DOM (keyPressed, windowDimensions, DimensionPair)
-import Signal (filter, runSignal, Signal, foldp, sampleOn, map2, unwrap, constant)
-import Signal.Time (every)
-import Math
+import Graphics.Canvas ( Canvas
+                       , CanvasElement
+                       , Context2D
+                       , getContext2D
+                       , getCanvasElementById
+                       , setCanvasHeight
+                       , setCanvasWidth
+                       , closePath
+                       , fill
+                       , arc
+                       , setFillStyle
+                       , beginPath
+                       , withContext
+                       , rect)
+
+import Signal.DOM (windowDimensions, DimensionPair)
+import Signal (runSignal, Signal, foldp, map2, unwrap, constant)
+import Math (max, min, pi)
+import DOM (DOM)
 
 foreign import data AUDIO :: !
 
@@ -29,13 +53,12 @@ type Planet =
   { x :: Number
   , y :: Number
   , r :: Number
-  , red :: Int
-  , green :: Int
-  , blue :: Int
+  , color :: Color
   , timestamp :: Number
   }
 
-maxAge = 2000.0
+maxAge :: Number
+maxAge = 3000.0
 
 getTimestamp :: Milliseconds -> Number
 getTimestamp (Milliseconds time) = time
@@ -45,11 +68,10 @@ timestamp' = do
   date <- now
   return $ getTimestamp $ toEpochMilliseconds date
 
-freq2colorLowerBound :: forall e. Number -> Int
-freq2colorLowerBound freq = floor (((min freq 2000.0) / 2000.0) * 255.0)
-
-randomPlanet :: forall e. Number -> Number -> Number -> Number -> DimensionPair -> Eff (random :: RANDOM, now :: Now | e) Planet
-randomPlanet r g b radius {w, h} = do
+randomPlanet :: forall e. Number -> DimensionPair -> Eff (random :: RANDOM, now :: Now | e) Planet
+randomPlanet radius {w, h} = do
+  hue <- randomRange 0.0 360.0
+  let col = hsl hue 1.0 (1.0-(radius / 256.0))
 
   x <- randomInt 0 w
   y <- randomInt 0 h
@@ -59,9 +81,7 @@ randomPlanet r g b radius {w, h} = do
   return { x: toNumber x
          , y: toNumber y
          , r: radius
-         , red: floor r
-         , green: floor g
-         , blue: floor b
+         , color: col
          , timestamp: timestamp
          }
 
@@ -76,39 +96,16 @@ amplitude ints
   | len ints > 0 = (toNumber (sum ints)) / (toNumber (len ints))
   | otherwise = 0.0
 
-type PeakCounterState = { prevWasPositive :: Boolean
-                        , count :: Number
-                        }
-
-doCount :: PeakCounterState -> Int -> PeakCounterState
-doCount state next
-  | state.prevWasPositive && next > 0 = state
-  | state.prevWasPositive && next <= 0 = {prevWasPositive: false, count: state.count}
-  | state.prevWasPositive == false && next > 0 = {prevWasPositive: true, count: state.count + 1.0}
-  | state.prevWasPositive == false && next <= 0 = state
-
-cutA = 200
-cutB = 400
-
-generatePlanet dimens audio =
-  let r = amplitude $ Data.Array.slice 0 cutA audio
-      g = amplitude $ Data.Array.slice cutA cutB audio
-      b = amplitude $ Data.Array.slice cutB 2048 audio
-  in randomPlanet r g b (amplitude audio) dimens
-
-identity :: forall a. a -> a
-identity x = x
-
-frameRate :: Signal Number
-frameRate = every 33.0
+generatePlanet :: forall eff. DimensionPair -> Array Int -> Eff (random :: RANDOM, now :: Now | eff) Planet
+generatePlanet dimens audio = randomPlanet (amplitude audio) dimens
 
 data Scene = Scene (List Planet) DimensionPair
 
 expired :: Number -> Planet -> Boolean
 expired now planet = (now - planet.timestamp) < maxAge
 
-scene :: forall eff. Signal (Array Int) -> Signal DimensionPair -> Eff (random :: RANDOM, now :: Now | eff) (Signal Scene)
-scene audio dimens = do
+scenes :: forall eff. Signal (Array Int) -> Signal DimensionPair -> Eff (random :: RANDOM, now :: Now | eff) (Signal Scene)
+scenes audio dimens = do
   planets <- unwrap $ map2 generatePlanet dimens audio
   timestamp <- timestamp'
 
@@ -120,9 +117,9 @@ scene audio dimens = do
 renderPlanets :: forall eff. Context2D -> Number -> List Planet -> (Eff (canvas :: Canvas | eff) Context2D)
 renderPlanets ctx timestamp Nil = do
   return ctx
-renderPlanets ctx timestamp (Cons planet scene) = do
+renderPlanets ctx timestamp (Cons planet planets) = do
   renderPlanet ctx timestamp planet
-  renderPlanets ctx timestamp scene
+  renderPlanets ctx timestamp planets
 
 blackness :: forall eff. Context2D -> DimensionPair -> (Eff (canvas :: Canvas | eff) Context2D)
 blackness ctx {w, h} = do
@@ -143,9 +140,7 @@ renderScene ctx (Scene planets dimens) = do
   renderPlanets ctx timestamp planets
   return unit
 
-min a b = if a < b then a else b
-max a b = if a > b then a else b
-
+calculateOpacity :: Number -> Number -> Number
 calculateOpacity nowstamp birthstamp =
   let age = nowstamp - birthstamp
   in 1.0 - ((max (min age maxAge) 1.0) / maxAge)
@@ -153,13 +148,12 @@ calculateOpacity nowstamp birthstamp =
 renderPlanet :: forall eff. Context2D -> Number -> Planet -> (Eff (canvas :: Canvas | eff) Context2D)
 renderPlanet ctx timestamp planet = withContext ctx $ do
   let opacity = calculateOpacity timestamp planet.timestamp
-  let color = "rgba(" ++ (show planet.red) ++ ", "
-                      ++ (show planet.green) ++ ", "
-                      ++ (show planet.blue) ++ ", "
-                      ++ (show opacity) ++ ")"
+      pColor = toRGBA planet.color
+      renderColor = rgba pColor.r pColor.g pColor.b opacity
+      color = cssStringRGBA renderColor
   beginPath ctx
   setFillStyle color ctx
-  arc ctx {x: planet.x, y: planet.y, r: planet.r, start: 0.0, end: Math.pi * 2.0}
+  arc ctx {x: planet.x, y: planet.y, r: planet.r, start: 0.0, end: pi * 2.0}
   fill ctx
   closePath ctx
 
@@ -175,6 +169,7 @@ foreign import audioStreamP :: forall e c. (c -> Signal c) -> Eff (audio :: AUDI
 audioStream :: forall e. Eff (audio :: AUDIO | e) (Signal (Array Int))
 audioStream = audioStreamP constant
 
+main :: forall e. Eff (audio :: AUDIO, canvas :: Canvas, random :: RANDOM, now :: Now, dom :: DOM, console :: CONSOLE | e) Unit
 main = do
   canvas <- getCanvasElementById "canvas"
   case canvas of
@@ -183,6 +178,6 @@ main = do
       ctx <- getContext2D canvasElement
       dimens <- windowDimensions
       audios <- audioStream
-      scene' <- scene audios dimens
-      runSignal $ map (renderScene ctx) scene'
+      scenes' <- scenes audios dimens
+      runSignal $ map (renderScene ctx) scenes'
       runSignal $ map (setCanvasSize canvasElement) dimens
