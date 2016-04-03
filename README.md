@@ -10,10 +10,4 @@ Licensed under WTFPL.
 1. Checkout code
 2. Run `bower i`
 3. Start server `pulp server`
-4. Open website
-
-## To Bundle
-
-```
-pulp browserify --to app.js
-```
+4. Open [localhost:1773](http://localhost:1773/)
